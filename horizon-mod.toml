@@ -1,0 +1,69 @@
+id = "thrown_item_textures"
+name = "Thrown Item Textures"
+version = "1.0.0"
+description = "Thrown snowballs, eggs and ender pearls are drawn as the item they were thrown as (item_model, custom_model_data, resource packs), as in vanilla's ThrownItemRenderer."
+authors = ["comudu"]
+license = "MIT"
+homepage = "https://github.com/comudu/horizon-thrown-item-textures"
+issues = "https://github.com/comudu/horizon-thrown-item-textures/issues"
+api = "0.2"
+# Drawing, plus the stack a thrown projectile keeps: the client installation (single player included).
+side = "client"
+capabilities = ["registries"]
+
+[native]
+game = "26.3"
+horizon = "0a875da91dbb0fdcb7ba8c42c11341aa229af51a"
+mixins = "e59da9094f0c2fdda6c627fe9eff22dec6a906f0"
+
+# 1. The stack a projectile is thrown as. Horizon keeps it only for an egg (`set_egg_item`):
+# a snowball or ender pearl thrown by the player, a dispenser or a mod forgets it. Every one of
+# those spawns goes through `spawn_projectile(projectile, stack)`, so the projectile handed to
+# `add_projectile` gets that stack (`ThrowableItemProjectile.setItem`).
+[[native.mixin]]
+id = "keep-thrown-stack"
+target = "horizon_client::game::projectile_spawned::Game<'_>::spawn_projectile"
+kind = "MODIFY_ARG"
+selector = "self.add_projectile"
+require = 1
+ordinal = 0
+argument = 0
+helper = "src/mixins/keep_thrown_stack.rs"
+bindings = [
+  { name = "projectile", ty = "Projectile", value = "$value" },
+  { name = "stack", ty = "&ItemStack", value = "stack" },
+]
+
+# 2. On a server, `ThrowableItemProjectile.DATA_ITEM_STACK` (entity data 8) says what a thrown
+# item is. Horizon reads it for fireballs and potions only; this keeps it for snowballs, eggs and
+# ender pearls too.
+[[native.mixin]]
+id = "remote-thrown-stack"
+target = "horizon_client::game::remote_projectiles::remote_projectile_item"
+kind = "HEAD"
+helper = "src/mixins/remote_thrown_stack.rs"
+bindings = [
+  { name = "projectiles", ty = "&mut horizon_client::join_seq::JoinList<Projectile, false>", value = "&mut *projectiles" },
+  { name = "id", ty = "u32", value = "id" },
+  { name = "stack", ty = "&ItemStack", value = "&stack" },
+]
+
+# 3. Drawing. Horizon draws a snowball, egg or pearl as its kind's fixed sprite
+# (`Projectile::item_sprite`: "item/snowball", ...), whatever it was thrown as. Vanilla's
+# ThrownItemRenderer draws the projectile's stack with its item model. This draws that stack the
+# way Horizon already draws a thrown potion (`resolve_item`, ground display, facing the camera),
+# so item_model, custom_model_data, CIT and resource pack models apply.
+[[native.mixin]]
+id = "draw-thrown-stack"
+target = "horizon_client::game::thrown_item_draw::Game<'_>::thrown_item_geometry"
+kind = "HEAD"
+cancellable = true
+helper = "src/mixins/draw_thrown_stack.rs"
+bindings = [
+  { name = "game", ty = "&Game<'_>", value = "self" },
+  { name = "a", ty = "&Projectile", value = "a" },
+  { name = "at", ty = "[f64; 3]", value = "at" },
+  { name = "c", ty = "glam::Vec3", value = "c" },
+  { name = "packed", ty = "u32", value = "packed" },
+  { name = "out", ty = "&mut Vec<Vertex>", value = "&mut *out" },
+]
